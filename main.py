@@ -18,7 +18,7 @@ async def send_heartbeat():
             await asyncio.sleep(60)
         except Exception as e:
             print(f"Error en heartbeat: {e}")
-            await asyncio.sleep(30)  # Reintentar después de 30 segundos
+            await asyncio.sleep(2)  # Reintentar después de 30 segundos
 
 @app.on_message(filters.command("start") & filters.private)
 async def start(client, message):
