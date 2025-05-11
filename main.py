@@ -1,22 +1,79 @@
+# Instala los requisitos primero:
+# pip install pyrogram openai python-dotenv
+
+import os
+from dotenv import load_dotenv
 from pyrogram import Client, filters
+from pyrogram.types import Message
+from openai import OpenAI
 
-# Credenciales (¡Recuerda que esto NO es seguro para producción!)
-api_id = 9063611
-api_hash = "4ac77fe0baef38b8937f3339c2854663"
-bot_token = "7853180813:AAE6Hch4qwXJ38E-iKmaBe3yZTjCys-hbe4"
+# Cargar variables de entorno
+load_dotenv()
 
-app = Client("mi_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+# Configuración
+API_ID = os.getenv("API_ID") or 123456  # Reemplaza con tu API ID de Telegram
+API_HASH = os.getenv("API_HASH") or "tu_api_hash"  # Reemplaza con tu API HASH
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "tu_bot_token"  # Token de tu bot de Telegram
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY") or "sk-a15b913adb254aaeaa838f4092306e24"
 
-@app.on_message(filters.command("start"))
-async def start(client, message):
-    """Maneja el comando /start"""
-    await message.reply_text("🤖 Bot de prueba activo desde Koyeb! 🚀\n\nEnvíame cualquier mensaje y te lo repetiré.")
+# Inicializar clientes
+deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+app = Client("deepseek_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-@app.on_message(filters.text & filters.private)
-async def echo(client, message):
-    """Repite los mensajes privados"""
-    await message.reply_text(f"📢 Eco: {message.text}")
+# Diccionario para almacenar historial de conversaciones
+conversations = {}
+
+def get_deepseek_response(user_id: int, text: str) -> str:
+    # Inicializar o obtener la conversación existente
+    if user_id not in conversations:
+        conversations[user_id] = [
+            {"role": "system", "content": "Eres un asistente útil que responde en español."}
+        ]
+    
+    # Agregar el nuevo mensaje
+    conversations[user_id].append({"role": "user", "content": text})
+    
+    try:
+        response = deepseek_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=conversations[user_id],
+            stream=False
+        )
+        
+        assistant_reply = response.choices[0].message.content
+        conversations[user_id].append({"role": "assistant", "content": assistant_reply})
+        
+        # Limitar el historial para no consumir muchos tokens
+        if len(conversations[user_id]) > 10:
+            conversations[user_id] = conversations[user_id][-8:]
+            
+        return assistant_reply
+        
+    except Exception as e:
+        print(f"Error con DeepSeek API: {e}")
+        return "❌ Ocurrió un error al procesar tu solicitud."
+
+# Comandos del bot
+@app.on_message(filters.command(["start", "help"]))
+async def start(client: Client, message: Message):
+    await message.reply_text(
+        "🤖 Hola! Soy un bot conectado a DeepSeek AI.\n\n"
+        "Simplemente escribe tu mensaje y te responderé.\n\n"
+        "Usa /new para comenzar una nueva conversación."
+    )
+
+@app.on_message(filters.command("new"))
+async def new_chat(client: Client, message: Message):
+    user_id = message.from_user.id
+    conversations.pop(user_id, None)
+    await message.reply_text("♻️ Nueva conversación iniciada. El historial anterior se ha borrado.")
+
+@app.on_message(filters.private & ~filters.command)
+async def chat(client: Client, message: Message):
+    user_id = message.from_user.id
+    response = get_deepseek_response(user_id, message.text)
+    await message.reply_text(response)
 
 if __name__ == "__main__":
-    print(">> Bot de prueba iniciado <<")
+    print("Bot iniciado...")
     app.run()
