@@ -1,5 +1,5 @@
 # Instala los requisitos primero:
-# pip install pyrogram openai python-dotenv
+# pip install pyrogram openai python-dotenv tgcrypto
 
 import os
 from dotenv import load_dotenv
@@ -11,9 +11,9 @@ from openai import OpenAI
 load_dotenv()
 
 # Configuración
-API_ID = os.getenv("API_ID") or 123456  # Reemplaza con tu API ID de Telegram
-API_HASH = os.getenv("API_HASH") or "tu_api_hash"  # Reemplaza con tu API HASH
-BOT_TOKEN = os.getenv("BOT_TOKEN") or "tu_bot_token"  # Token de tu bot de Telegram
+API_ID = os.getenv("API_ID") or 123456
+API_HASH = os.getenv("API_HASH") or "tu_api_hash"
+BOT_TOKEN = os.getenv("BOT_TOKEN") or "tu_bot_token"
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY") or "sk-a15b913adb254aaeaa838f4092306e24"
 
 # Inicializar clientes
@@ -24,13 +24,11 @@ app = Client("deepseek_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOK
 conversations = {}
 
 def get_deepseek_response(user_id: int, text: str) -> str:
-    # Inicializar o obtener la conversación existente
     if user_id not in conversations:
         conversations[user_id] = [
             {"role": "system", "content": "Eres un asistente útil que responde en español."}
         ]
     
-    # Agregar el nuevo mensaje
     conversations[user_id].append({"role": "user", "content": text})
     
     try:
@@ -43,7 +41,6 @@ def get_deepseek_response(user_id: int, text: str) -> str:
         assistant_reply = response.choices[0].message.content
         conversations[user_id].append({"role": "assistant", "content": assistant_reply})
         
-        # Limitar el historial para no consumir muchos tokens
         if len(conversations[user_id]) > 10:
             conversations[user_id] = conversations[user_id][-8:]
             
@@ -68,7 +65,8 @@ async def new_chat(client: Client, message: Message):
     conversations.pop(user_id, None)
     await message.reply_text("♻️ Nueva conversación iniciada. El historial anterior se ha borrado.")
 
-@app.on_message(filters.private & ~filters.command)
+# Corrección importante aquí:
+@app.on_message(filters.private & ~filters.command(["start", "help", "new"]))
 async def chat(client: Client, message: Message):
     user_id = message.from_user.id
     response = get_deepseek_response(user_id, message.text)
